@@ -1,5 +1,7 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, filters
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
 
@@ -43,6 +45,11 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
     """
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['category', 'category__parent']
+    search_fields = ['name', 'description']
+    ordering_fields = ['price', 'created_at', 'name']
+    ordering = ['-created_at']
 
 class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """
