@@ -113,6 +113,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# REST framework
+REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
+    'DEFAULT_RENDERER_CLASSES': [
+        'core.renderers.StandardJSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
