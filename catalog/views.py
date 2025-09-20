@@ -1,6 +1,8 @@
 from rest_framework import generics, status, filters
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Avg
 
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
@@ -38,6 +40,42 @@ class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         return super().destroy(request, *args, **kwargs)
+    
+class CategoryAveragePriceAPIView(APIView):
+    """
+    Return average product price for a given category
+    """
+    def get(self, request, pk):
+        try:
+            category = Category.objects.get(pk=pk)
+        except Category.DoesNotExist:
+            return Response(
+                data='Category with the given ID does not exist',
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get all products in this category and subcategories
+        all_categories = [category] + category.get_all_children()
+        
+        avg_price = Product.objects.filter(
+            category__in=all_categories,
+            is_active = True
+        ).aggregate(avg_price=Avg('price'))['avg_price']
+
+        total_products = Product.objects.filter(
+            category__in=all_categories,
+            is_active = True
+        ).count()
+
+        return Response(
+            data={
+                'category_id': category.id,
+                'category_name': category.name,
+                'average_price': round(avg_price, 2) if avg_price else 0,
+                'total_products': total_products
+            },
+            status=status.HTTP_200_OK
+        )
     
 class ProductListCreateAPIView(generics.ListCreateAPIView):
     """
