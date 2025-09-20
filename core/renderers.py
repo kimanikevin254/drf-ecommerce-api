@@ -11,7 +11,7 @@ class StandardJSONRenderer(JSONRenderer):
             # Success response
             custom_response = {
                 'success': True,
-                'errors': False,
+                'errors': None,
                 'data': data
             }
 

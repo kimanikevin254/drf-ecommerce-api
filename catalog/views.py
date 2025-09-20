@@ -1,7 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
 from .models import Category, Product
-from .serializers import CategorySerializer
+from .serializers import CategorySerializer, ProductSerializer
 
 class CategoryListCreateAPIView(generics.ListCreateAPIView):
     """
@@ -36,3 +36,22 @@ class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         return super().destroy(request, *args, **kwargs)
+    
+class ProductListCreateAPIView(generics.ListCreateAPIView):
+    """
+    List all products or create a new product
+    """
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+
+class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update, or delete a product
+    """
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+
+    def perform_destroy(self, instance):
+        """Soft delete - mark as inactive instead of deleting"""
+        instance.is_active = False
+        instance.save()
