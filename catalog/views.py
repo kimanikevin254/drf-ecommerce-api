@@ -60,7 +60,9 @@ class CategoryAveragePriceAPIView(APIView):
         avg_price = Product.objects.filter(
             category__in=all_categories,
             is_active = True
-        ).aggregate(avg_price=Avg('price'))['avg_price']
+        ).aggregate( # perform db-level calculation
+            avg_price=Avg('price') # get average of the proce field
+        )['avg_price'] # extract the value from returned dict
 
         total_products = Product.objects.filter(
             category__in=all_categories,
