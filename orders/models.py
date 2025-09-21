@@ -18,9 +18,9 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
 
     # Customer details captured at checkout
-    customer_email = models.EmailField()
-    customer_phone = models.CharField(max_length=15)
-    delivery_address = models.TextField()
+    customer_email = models.EmailField(blank=True)
+    customer_phone = models.CharField(max_length=15, blank=True)
+    delivery_address = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

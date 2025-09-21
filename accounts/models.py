@@ -19,3 +19,11 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+    
+    @property
+    def is_customer(self):
+        return self.user_type == 'customer'
+    
+    @property
+    def is_admin_user(self):
+        return self.user_type == 'admin'
