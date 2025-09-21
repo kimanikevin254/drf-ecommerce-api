@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 
 from .models import Order
 from .serializers import OrderCreateSerializer, OrderListSerializer
+from .permissions import IsCustomerOrAdminReadOnly
 
 User = get_user_model()
 
@@ -11,7 +12,7 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
     """
     List customer's orders or create a new order
     """
-    # TODO: Add permission classes to allow only authenticated users
+    permission_classes = [IsCustomerOrAdminReadOnly]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':

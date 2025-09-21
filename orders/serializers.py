@@ -35,13 +35,15 @@ class OrderCreateSerializer(serializers.ModelSerializer):
 
         # Check stock for all items
         for item_data in items_data:
-            product = items_data['product']
-            quantity = items_data['quantity']
+            product = item_data['product']
+            quantity = item_data['quantity']
 
             if product.stock_quantity < quantity:
                 raise serializers.ValidationError(
                     f"Insufficient stock for {product.name}. Available: {product.stock_quantity}, Requested: {quantity}"
                 )
+            
+        return data
 
     def validate_items(self, value):
         if not value:
@@ -56,7 +58,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         
         with transaction.atomic(): # Ensure all-or-nothing
             # Create order
-            order = Order.objects.create(**validated_data)
+            order = Order.objects.create(total_amount=0, **validated_data)
             total = 0
 
             # Create order items
