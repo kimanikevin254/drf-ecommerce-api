@@ -6,6 +6,7 @@ from django.db.models import Avg
 
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
+from .permissions import IsAdminOrReadOnly
 
 class CategoryListCreateAPIView(generics.ListCreateAPIView):
     """
@@ -13,6 +14,7 @@ class CategoryListCreateAPIView(generics.ListCreateAPIView):
     """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
 
 class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """
@@ -20,6 +22,7 @@ class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
 
     def destroy(self, request, *args, **kwargs):
         """Custom destroy method with additional checks"""
@@ -85,6 +88,7 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
     """
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['category', 'category__parent']
     search_fields = ['name', 'description']
@@ -97,6 +101,7 @@ class ProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    permission_classes = [IsAdminOrReadOnly]
 
     def perform_destroy(self, instance):
         """Soft delete - mark as inactive instead of deleting"""
