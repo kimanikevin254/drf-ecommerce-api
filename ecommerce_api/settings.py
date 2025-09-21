@@ -117,6 +117,7 @@ SOCIALACCOUNT_PROVIDERS = {
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_SIGNUP_FIELDS = ['email*',]
 ACCOUNT_LOGIN_METHODS = {'email'}
+SOCIALACCOUNT_LOGIN_ON_GET = True
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -199,5 +200,3 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Redirect after Google login to get tokens
 LOGIN_REDIRECT_URL = '/api/v1/auth/google/callback/'
-
-SOCIALACCOUNT_LOGIN_ON_GET = True
