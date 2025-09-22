@@ -56,4 +56,7 @@ class OrderDetailAPIView(generics.RetrieveAPIView):
     serializer_class = OrderListSerializer
     
     def get_queryset(self):
+        user = self.request.user
+        if user.user_type == 'admin':
+            return Order.objects.all()
         return Order.objects.filter(customer=self.request.user)
