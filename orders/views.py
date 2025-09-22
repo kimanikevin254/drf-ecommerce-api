@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from .models import Order
 from .serializers import OrderCreateSerializer, OrderListSerializer
 from .permissions import IsCustomerOrAdminReadOnly
+from .tasks import send_order_notifications
 
 User = get_user_model()
 
@@ -40,8 +41,8 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
             delivery_address=serializer.validated_data.get('delivery_address') or user.address,
         )
 
-        # TODO: Trigger SMS and email notifications
-    
+        # Send notifications
+        send_order_notifications.delay(order.id)      
 
 class OrderDetailAPIView(generics.RetrieveAPIView):
     """
