@@ -52,7 +52,7 @@ class OrderDetailAPIView(generics.RetrieveAPIView):
     Retrieve a specific order
     Customers can only see their orders
     """
-    # TODO: Add permissions to limit to only authenticated users
+    permission_classes = [IsCustomerOrAdminReadOnly]
     serializer_class = OrderListSerializer
     
     def get_queryset(self):
