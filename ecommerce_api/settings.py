@@ -214,3 +214,7 @@ CELERY_TIMEZONE = 'UTC'
 # Email configuration (for development only)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@ecommerce.com'
+
+# Africa's Talking
+AFRICASTALKING_USERNAME = os.getenv('AFRICASTALKING_USERNAME')
+AFRICASTALKING_API_KEY = os.getenv('AFRICASTALKING_API_KEY')
