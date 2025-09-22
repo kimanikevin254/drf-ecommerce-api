@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from catalog.models import Category, Product
 from orders.models import Order, OrderItem
+from orders.tasks import send_order_notifications, send_customer_sms, send_admin_email
 
 User = get_user_model()
 
@@ -448,3 +449,152 @@ class OrderDetailTestCase(APITestCase):
         url = "/api/v1/orders/9999/"  # assuming this ID doesn’t exist
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+class OrderTasksTestCase(TestCase):
+    def setUp(self):
+        """Set up test data"""
+        self.customer = User.objects.create_user(
+            email='customer@test.com',
+            first_name='John',
+            last_name='Doe',
+            user_type='customer',
+            phone_number='+254700000000',
+            address='Test Address'
+        )
+        
+        self.admin = User.objects.create_user(
+            email='admin@test.com',
+            user_type='admin',
+            is_active=True
+        )
+
+        # Create test order
+        category = Category.objects.create(name='Electronics')
+        product = Product.objects.create(
+            name='iPhone 15',
+            price=Decimal('999.99'),
+            stock_quantity=10,
+            category=category
+        )
+        
+        self.order = Order.objects.create(
+            customer=self.customer,
+            customer_email='customer@test.com',
+            customer_phone='+254700000000',
+            delivery_address='Test Address',
+            total_amount=Decimal('999.99')
+        )
+        
+        OrderItem.objects.create(
+            order=self.order,
+            product=product,
+            quantity=1,
+            price=Decimal('999.99')
+        )
+    
+    @patch('orders.tasks.send_customer_sms.delay')
+    @patch('orders.tasks.send_admin_email.delay')
+    def test_send_order_notifications_success(self, mock_email, mock_sms):
+        """Test successful notification orchestration"""
+        # Mock the delay methods return value
+        mock_email.return_value = MagicMock(id='email-task-123')
+        mock_sms.return_value = MagicMock(id='sms-task-123')
+
+        # Execute task
+        result = send_order_notifications(self.order.id)
+
+        # Assertion
+        self.assertIn('sms_task_id', result)
+        self.assertIn('email_task_id', result)
+        self.assertEqual(result['sms_task_id'], 'sms-task-123')
+        self.assertEqual(result['email_task_id'], 'email-task-123')
+        
+        # Verify subtasks were called with correct order ID
+        mock_sms.assert_called_once_with(self.order.id)
+        mock_email.assert_called_once_with(self.order.id)
+
+    def test_send_order_notifications_order_not_found(self):
+        """Test with non-existent order"""
+        with self.assertRaises(Order.DoesNotExist):
+            send_order_notifications(9999)
+
+    patch('orders.tasks.order_sms_service.send_order_confirmation_sms')
+    def send_customer_sms_success(self, mock_sms_service):
+        """Test successful sms sending"""
+        mock_sms_service.return_value = {'success': True, 'message_id': 'test-123', 'cost': 'KES 1.00'}
+
+        result = send_customer_sms(self.order.id)
+
+        self.assertIn('message_id', result)
+        self.assertTrue(result['success'])
+        mock_sms_service.assert_called_once_with(self.order.id)
+
+    patch('orders.tasks.order_sms_service.send_order_confirmation_sms')
+    def send_customer_sms_no_phone_number(self, mock_sms_service):
+        """Test SMS task when customer has no phone number"""
+        order_no_phone = Order.objects.create(
+            customer=self.customer,
+            customer_email='customer@test.com',
+            customer_phone='',  # Empty phone
+            delivery_address='Test Address',
+            total_amount=Decimal('999.99')
+        )
+
+        result = send_customer_sms(order_no_phone.id)
+
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No phone number')
+        mock_sms_service.assert_not_called()
+
+    def test_send_customer_sms_order_not_found(self):
+        """Test SMS task with non-existent order"""
+        with self.assertRaises(Order.DoesNotExist):
+            send_customer_sms(99999)
+
+    @patch('orders.tasks.order_sms_service.send_order_confirmation_sms')
+    def test_send_customer_sms_service_failure(self, mock_sms_service):
+        """Test SMS task when service raises exception"""
+        # Mock service to raise exception
+        mock_sms_service.side_effect = Exception("Africa's Talking API error")
+        
+        with self.assertRaises(Exception) as context:
+            send_customer_sms(self.order.id)
+        
+        self.assertIn("Africa's Talking API error", str(context.exception))
+
+    @patch('orders.tasks.order_email_service.send_admin_notification')
+    def test_send_admin_email_success(self, mock_email_service):
+        """Test successful admin email sending"""
+        # Mock service response
+        mock_email_service.return_value = {
+            'success': True,
+            'recipients': 1,
+            'admin_emails': ['admin@test.com']
+        }
+        
+        # Execute task
+        result = send_admin_email(self.order.id)
+        
+        # Assertions
+        self.assertTrue(result['success'])
+        self.assertEqual(result['recipients'], 1)
+        self.assertIn('admin@test.com', result['admin_emails'])
+        
+        # Verify service was called with correct order
+        mock_email_service.assert_called_once_with(self.order)
+
+    def test_send_admin_email_order_not_found(self):
+        """Test admin email task with non-existent order"""
+        with self.assertRaises(Order.DoesNotExist):
+            send_admin_email(99999)
+
+    @patch('orders.tasks.order_email_service.send_admin_notification')
+    def test_send_admin_email_service_failure(self, mock_email_service):
+        """Test admin email task when service fails"""
+        # Mock service to raise exception
+        mock_email_service.side_effect = Exception("SMTP server unavailable")
+        
+        with self.assertRaises(Exception) as context:
+            send_admin_email(self.order.id)
+        
+        self.assertIn("SMTP server unavailable", str(context.exception))
