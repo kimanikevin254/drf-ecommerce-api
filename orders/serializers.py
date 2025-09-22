@@ -22,11 +22,13 @@ class OrderCreateSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
     total_amount = serializers.ReadOnlyField()
 
+    save_as_default = serializers.BooleanField(required=False, default=False)
+
     class Meta:
         model = Order
         fields = [
             'customer_email', 'customer_phone', 'delivery_address',
-            'items', 'total_amount'
+            'items', 'total_amount', 'save_as_default'
         ]
 
     def validate(self, data):
@@ -43,6 +45,28 @@ class OrderCreateSerializer(serializers.ModelSerializer):
                     f"Insufficient stock for {product.name}. Available: {product.stock_quantity}, Requested: {quantity}"
                 )
             
+        # Validate required fields for order completion
+        user = self.context['request'].user
+
+        final_phone = data.get('customer_phone') or user.phone_number
+        final_address = data.get('delivery_address') or user.address
+
+        errors = {}
+
+        if not final_phone:
+            errors['customer_phone'] = 'Phone number is required for SMS notifications and delivery. Please provide one.'
+        
+        if not final_address:
+            errors['delivery_address'] = 'Delivery address is required. Please provide one.'
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        
+        # Store final values for use in the create method
+        data['_final_phone'] = final_phone  
+        data['_final_address'] = final_address
+        data['_save_as_default'] = data.pop('save_as_default', False)
+            
         return data
 
     def validate_items(self, value):
@@ -54,7 +78,12 @@ class OrderCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         items_data = validated_data.pop('items')
+        
+        save_as_default = validated_data.pop('_save_as_default', False)
+        final_phone = validated_data.pop('_final_phone')
+        final_address = validated_data.pop('_final_address')
 
+        user = self.context['request'].user
         
         with transaction.atomic(): # Ensure all-or-nothing
             # Create order
@@ -79,6 +108,21 @@ class OrderCreateSerializer(serializers.ModelSerializer):
                 product.save()
 
                 total += order_item.subtotal
+
+            # Update user delivery_address/phone_number is requested
+            profile_updated = False
+            if save_as_default:
+                # Only update if provided values are different from the saved ones
+                if final_phone != user.phone_number:
+                    user.phone_number = final_phone
+                    profile_updated = True
+                
+                if final_address != user.address:
+                    user.address = final_address
+                    profile_updated = True
+
+                if profile_updated:
+                    user.save()
 
             # update order total
             order.total_amount = total

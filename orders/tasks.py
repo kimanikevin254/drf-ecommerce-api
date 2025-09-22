@@ -52,7 +52,7 @@ def send_customer_sms(order_id):
         )
 
         # TODO: Implement Africa's Talking API call
-        logger.infp(f'SMS to {order.customer_phone}: {message}')
+        logger.info(f'SMS to {order.customer_phone}: {message}')
 
         return {
             'success': True,
