@@ -263,3 +263,188 @@ class OrderCreationTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(Order.objects.count(), 0)
         
+class OrderListTestCase(APITestCase):
+    def setUp(self):
+        # Create test users
+        self.customer1 = User.objects.create_user(
+            email='customer1@test.com',
+            first_name='John',
+            last_name='Doe',
+            user_type='customer',
+            phone_number='+254700000000',
+            address='Test Address, Nairobi'
+        )
+
+        self.customer2 = User.objects.create_user(
+            email='customer2@test.com',
+            first_name='Jane',
+            last_name='Doe',
+            user_type='customer',
+            phone_number='+254711111111',
+            address='Test Address 2, Nairobi'
+        )
+
+        self.admin = User.objects.create_user(
+            email='admin@test.com',
+            password='testpass123',
+            first_name='Admin',
+            last_name='User',
+            user_type='admin',
+        )
+
+        # Create test products
+        self.category = Category.objects.create(name='Electronics')
+        self.product1 = Product.objects.create(
+            name='Samsung S25',
+            price=Decimal('150000.00'),
+            stock_quantity=10,
+            category=self.category
+        )
+        self.product2 = Product.objects.create(
+            name='Macbook Pro',
+            price=Decimal('250000.00'),
+            stock_quantity=5,
+            category=self.category
+        )
+
+        # Create test orders
+        self.order1 = Order.objects.create(
+            customer=self.customer1,
+            customer_phone=self.customer1.phone_number,
+            customer_email=self.customer1.email,
+            delivery_address=self.customer1.address,
+            total_amount=Decimal('300000')
+        )
+
+        self.order2 = Order.objects.create(
+            customer=self.customer2,
+            customer_phone=self.customer2.phone_number,
+            customer_email=self.customer2.email,
+            delivery_address=self.customer2.address,
+            total_amount=Decimal('500000')
+        )
+
+        # Create order items
+        self.order_items = OrderItem.objects.bulk_create([
+            OrderItem(
+                order=self.order1, 
+                product=self.product1,
+                quantity=2,
+                price=self.product1.price
+            ),
+            OrderItem(
+                order=self.order2, 
+                product=self.product2,
+                quantity=2,
+                price=self.product2.price
+            )
+        ])
+
+        # Set up API client with JWT auth
+        self.client = APIClient()
+
+    def get_jwt_token(self, user):
+        """Helper to get JWT token for user"""
+        refresh = RefreshToken.for_user(user)
+        return str(refresh.access_token)
+    
+    def authenticate_admin(self):
+        """Authenticate as admin"""
+        token = self.get_jwt_token(self.admin)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+    
+    def test_customer_can_only_access_own_orders(self):
+        """User can only access their own orders"""
+        token = self.get_jwt_token(self.customer1)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}') 
+
+        response = self.client.get('/api/v1/orders/', format='json')
+
+        # Only customer1's orders should appear
+        self.assertTrue(all(order['customer_email'] == self.customer1.email for order in response.data['results']))
+
+        # Ensure customer2's order is excluded
+        self.assertFalse(any(order['customer_email'] == self.customer2.email for order in response.data['results']))
+
+    
+    def test_admin_can_access_all_orders(self):
+        """Admins can list all orders"""
+        self.authenticate_admin()
+
+        orders_count = Order.objects.count()
+
+        response = self.client.get('/api/v1/orders/', format='json')
+
+        self.assertEqual(orders_count, len(response.data['results']))
+
+class OrderDetailTestCase(APITestCase):
+    def setUp(self):
+        # Create customers
+        self.customer1 = User.objects.create_user(
+            email="customer1@test.com",
+            password="testpass123",
+            user_type="customer"
+        )
+        self.customer2 = User.objects.create_user(
+            email="customer2@test.com",
+            password="testpass123",
+            user_type="customer"
+        )
+
+        # Create admin
+        self.admin = User.objects.create_user(
+            email="admin@test.com",
+            password="adminpass123",
+            user_type="admin"
+        )
+
+        # Create an order for customer1
+        self.order1 = Order.objects.create(
+            customer=self.customer1,
+            status="pending",
+            total_amount=1000
+        )
+
+        # URL for order1 detail
+        self.url = f"/api/v1/orders/{self.order1.id}/"
+
+    def get_jwt_token(self, user):
+        """Helper to get JWT token for user"""
+        refresh = RefreshToken.for_user(user)
+        return str(refresh.access_token)
+
+    def authenticate_user(self, user):
+        """Helper to authenticate user"""
+        token = self.get_jwt_token(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    
+    def test_customer_can_retrieve_own_order(self):
+        self.authenticate_user(self.customer1)
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.order1.id)
+
+    def test_customer_cannot_retrieve_other_customer_order(self):
+        self.authenticate_user(self.customer2)
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_can_retrieve_any_order(self):
+        self.authenticate_user(self.admin)
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.order1.id)
+
+    def test_unauthenticated_user_cannot_retrieve_order(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_retrieve_nonexistent_order_returns_404(self):
+        self.authenticate_user(self.customer1)
+
+        url = "/api/v1/orders/9999/"  # assuming this ID doesn’t exist
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
