@@ -200,3 +200,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Redirect after Google login to get tokens
 LOGIN_REDIRECT_URL = '/api/v1/auth/google/callback/'
+
+# Celery Configuration
+REDIS_PORT = os.getenv('REDIS_PORT')
+
+CELERY_BROKER_URL = f'redis://localhost:{REDIS_PORT}/0'
+CELERY_RESULT_BACKEND = f'redis://localhost:{REDIS_PORT}/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'

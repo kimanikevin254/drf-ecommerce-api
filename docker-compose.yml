@@ -12,5 +12,12 @@ services:
             - postgres_data:/var/lib/postgresql/data
         restart: unless-stopped
 
+    redis:
+        image: redis:7-alpine
+        container_name: ecommerce_redis
+        ports:
+            - "${REDIS_PORT}:6379"
+        restart: unless-stopped
+
 volumes:
     postgres_data:
