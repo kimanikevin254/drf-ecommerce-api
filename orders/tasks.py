@@ -1,8 +1,6 @@
 import logging
 
 from celery import shared_task
-from django.core.mail import send_mail
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from .models import Order
 from .services import order_sms_service, order_email_service
