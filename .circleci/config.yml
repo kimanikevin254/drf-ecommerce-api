@@ -26,18 +26,18 @@ jobs:
       - run:
           name: Install Python dependencies
           command: |
-            . venv/bin/activate
+            source .venv/bin/activate
             pip install -r requirements.txt
 
       - save_cache:
           paths:
-            - venv
+            - .venv
           key: v1-deps-{{ checksum "requirements.txt" }}
 
       - run:
           name: Run tests with coverage
           command: |
-            . venv/bin/activate
+            source .venv/bin/activate
             coverage run manage.py test
             coverage report
             coverage xml
