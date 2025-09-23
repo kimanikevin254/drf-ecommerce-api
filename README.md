@@ -52,3 +52,7 @@ A Django REST API for ecommerce with OpenID connect authentication, background n
 ## API Documentation
 
 See [API_DOCS.md](/docs/API_DOCS.md) for detailed endpoint documentation.
+
+## Deployment
+
+See [DEPLOYMENT.md](/docs/DEPLOYMENT.md) for Kubernetes deployment instructions.
