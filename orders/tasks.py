@@ -3,7 +3,8 @@ import logging
 from celery import shared_task
 from django.contrib.auth import get_user_model
 from .models import Order
-from .services import order_sms_service, order_email_service
+from .services.order_email_service import order_email_service
+from services.order_sms_service import order_sms_service
 
 User = get_user_model()
 logger = logging.getLogger(__name__)

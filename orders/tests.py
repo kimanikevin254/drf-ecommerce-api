@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.core import mail
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
@@ -9,6 +10,7 @@ from decimal import Decimal
 from catalog.models import Category, Product
 from orders.models import Order, OrderItem
 from orders.tasks import send_order_notifications, send_customer_sms, send_admin_email
+from orders.services.order_email_service import OrderEmailService
 
 User = get_user_model()
 
@@ -598,3 +600,182 @@ class OrderTasksTestCase(TestCase):
             send_admin_email(self.order.id)
         
         self.assertIn("SMTP server unavailable", str(context.exception))
+
+class OrderEmailServiceTestCase(TestCase):
+    def setUp(self):
+        """Set up test data"""
+        # Create test users
+        self.customer = User.objects.create_user(
+            email='customer@test.com',
+            first_name='John',
+            last_name='Doe',
+            user_type='customer'
+        )
+        
+        self.admin1 = User.objects.create_user(
+            email='admin1@test.com',
+            first_name='Admin',
+            last_name='One',
+            user_type='admin',
+            is_active=True
+        )
+        
+        self.admin2 = User.objects.create_user(
+            email='admin2@test.com',
+            first_name='Admin',
+            last_name='Two',
+            user_type='admin',
+            is_active=True
+        )
+        
+        # Create inactive admin (should be excluded)
+        self.inactive_admin = User.objects.create_user(
+            email='inactive@test.com',
+            user_type='admin',
+            is_active=False
+        )
+
+        # Create test order with items
+        category = Category.objects.create(name='Electronics')
+        self.product1 = Product.objects.create(
+            name='iPhone 15',
+            price=Decimal('999.99'),
+            category=category
+        )
+        self.product2 = Product.objects.create(
+            name='MacBook Pro',
+            price=Decimal('1999.99'),
+            category=category
+        )
+        
+        self.order = Order.objects.create(
+            customer=self.customer,
+            customer_email='customer@test.com',
+            customer_phone='+254700000000',
+            delivery_address='123 Test Street, Nairobi',
+            total_amount=Decimal('2999.97')
+        )
+        
+        OrderItem.objects.create(
+            order=self.order,
+            product=self.product1,
+            quantity=1,
+            price=Decimal('999.99')
+        )
+        
+        OrderItem.objects.create(
+            order=self.order,
+            product=self.product2,
+            quantity=1,
+            price=Decimal('1999.99')
+        )
+        
+        self.service = OrderEmailService()
+
+    def test_get_admin_emails_success(self):
+        """Test retrieving active admin emails"""
+        admin_emails = self.service.get_admin_emails()
+
+        # Should return 2 active admins
+        self.assertEqual(len(admin_emails), 2)
+        self.assertIn('admin1@test.com', admin_emails)
+        self.assertIn('admin2@test.com', admin_emails)
+
+        # should not include inactive admins and customer email
+        self.assertNotIn('inactive@test.com', admin_emails)
+        self.assertNotIn('customer@test.com', admin_emails)
+
+    def test_get_admin_emails_no_admins(self):
+        """Test retrieving admin emails when no active admins exist"""
+        # Delete all active admins
+        User.objects.filter(user_type='admin', is_active=True).delete()
+        
+        admin_emails = self.service.get_admin_emails()
+        
+        self.assertEqual(len(admin_emails), 0)
+        self.assertEqual(admin_emails, [])
+
+    def test_create_admin_notification_content(self):
+        """Test creating email subject and message content"""
+        subject, message = self.service.create_admin_notification_content(self.order)
+        
+        # Test subject
+        expected_subject = f'New Order #{self.order.id} - $2999.97'
+        self.assertEqual(subject, expected_subject)
+        
+        # Test message content contains key information
+        self.assertIn(f'Order ID: #{self.order.id}', message)
+        self.assertIn('Customer: John Doe', message)
+        self.assertIn('customer@test.com', message)
+        self.assertIn('+254700000000', message)
+        self.assertIn('$2999.97', message)
+        self.assertIn('123 Test Street, Nairobi', message)
+        self.assertIn('iPhone 15 x 1 = $999.99', message)
+        self.assertIn('MacBook Pro x 1 = $1999.99', message)
+        self.assertIn('Items: 2', message)
+    
+    def test_send_admin_notification_success(self):
+        """Test successful admin notification sending"""
+        # Clear any existing emails
+        mail.outbox = []
+        
+        result = self.service.send_admin_notification(self.order)
+        
+        # Check return value
+        self.assertTrue(result['success'])
+        self.assertEqual(result['recipients'], 2)
+        
+        # Check email was sent
+        self.assertEqual(len(mail.outbox), 1)
+        
+        # Check email content
+        sent_email = mail.outbox[0]
+        self.assertEqual(sent_email.subject, f'New Order #{self.order.id} - $2999.97')
+        self.assertEqual(len(sent_email.to), 2)
+        self.assertIn('admin1@test.com', sent_email.to)
+        self.assertIn('admin2@test.com', sent_email.to)
+        self.assertIn('iPhone 15', sent_email.body)
+        self.assertIn('MacBook Pro', sent_email.body)
+
+    def test_send_admin_notification_no_admins(self):
+        """Test sending notification when no admins exist"""
+        # Delete all admins
+        User.objects.filter(user_type='admin').delete()
+        
+        result = self.service.send_admin_notification(self.order)
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No admin emails')
+
+    @patch('orders.services.order_email_service.send_mail')
+    def test_send_admin_notification_email_failure(self, mock_send_mail):
+        """Test handling email sending failure"""
+        # Mock send_mail to raise exception
+        mock_send_mail.side_effect = Exception("SMTP server unavailable")
+        
+        result = self.service.send_admin_notification(self.order)
+        
+        self.assertFalse(result['success'])
+        self.assertIn('Email sending failed', result['error'])
+        self.assertIn('SMTP server unavailable', result['error'])
+
+    @patch("orders.services.order_email_service.send_mail")
+    def test_send_admin_notification_send_mail_called_correctly(self, mock_send_mail):
+        """Test that send_mail is called with correct parameters"""
+        mock_send_mail.return_value = True
+        
+        self.service.send_admin_notification(self.order)
+        
+        # Verify send_mail was called
+        mock_send_mail.assert_called_once()
+        
+        # Get the call arguments
+        call_args = mock_send_mail.call_args
+        
+        # Check arguments
+        self.assertEqual(call_args.kwargs['subject'], f'New Order #{self.order.id} - $2999.97')
+        self.assertIn('iPhone 15', call_args.kwargs['message'])
+        self.assertEqual(len(call_args.kwargs['recipient_list']), 2)
+        self.assertIn('admin1@test.com', call_args.kwargs['recipient_list'])
+        self.assertIn('admin2@test.com', call_args.kwargs['recipient_list'])
+        self.assertFalse(call_args.kwargs['fail_silently'])
