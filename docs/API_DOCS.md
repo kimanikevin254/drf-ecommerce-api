@@ -4,7 +4,25 @@
 
 All order-related endpoints require JWT authentication via Google OIDC (for customers).
 
-### Get JWT Tokens
+### Create Admin (CLI)
+
+```bash
+python3 manage.py createadmin
+```
+
+### Admin Login
+
+```http
+POST /api/v1/auth/admin/login/
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "admin_password"
+}
+```
+
+### Customer Login
 
 ```http
 GET /api/v1/auth/google/login/

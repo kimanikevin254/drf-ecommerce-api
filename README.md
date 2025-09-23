@@ -49,6 +49,31 @@ A Django REST API for ecommerce with OpenID connect authentication, background n
 
     > Make sure to replace the placeholders in the `.env` file with your own credentials.
 
+4. Start all services:
+
+    ```bash
+    docker compose up -d
+    ```
+
+5. Run migrations:
+
+    ```bash
+    python3 manage.py makemigrations
+    python3 manage.py migrate
+    ```
+
+6. Create admin:
+
+    ```bash
+    python3 manage.py createadmin
+    ```
+
+7. Run server:
+
+    ```bash
+    python3 manage.py runserver
+    ```
+
 ## API Documentation
 
 See [API_DOCS.md](/docs/API_DOCS.md) for detailed endpoint documentation.

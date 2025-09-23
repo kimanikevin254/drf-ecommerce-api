@@ -6,33 +6,6 @@
 -   Minikube
 -   kubectl configured
 
-## Local Deployment with Docker Compose
-
-1. Start all services:
-
-    ```bash
-    docker compose up -d
-    ```
-
-2. Run migrations:
-
-    ```bash
-    python3 manage.py makemigrations
-    python3 manage.py migrate
-    ```
-
-3. Create super user:
-
-    ```bash
-    python3 manage.py createsuperuser
-    ```
-
-4. Run server:
-
-    ```bash
-    python3 manage.py runserver
-    ```
-
 ## Local Kubernetes Deployment with Minikube
 
 1. Create configmap and secret files:
