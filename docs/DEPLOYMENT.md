@@ -15,7 +15,7 @@
     cp k8s/secret.template.yaml secret.yaml
     ```
 
-    > Make sure to replace the placeholder values in the new files with your actual values. To generate base64 encode values, you can use `echo -n "<YOUR-STRING>" | base64`.
+    > Make sure to replace the placeholder values in the new files with your actual values. To generate base64 encode values, you can use `echo -n "<YOUR-STRING>" | base64` or `python3 encode.py "<YOUR-STRING"`.
 
 2. Start minikube and enable ingress addon:
 
