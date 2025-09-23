@@ -28,3 +28,6 @@ LOGGING = {
         'handlers': ['null'],
     },
 }
+
+AFRICASTALKING_USERNAME = 'test'
+AFRICASTALKING_API_KEY = 'test'
