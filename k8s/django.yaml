@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: django-app
+  template:
+    metadata:
+      labels:
+        app: django-app
+    spec:
+      initContainers:
+      - name: migrate
+        # image: kimanikevin254/drf-ecommerce-api:latest
+        image: ecommerce_api:local
+        imagePullPolicy: Never  
+        command: ["python", "manage.py", "migrate"]
+        envFrom:
+          - configMapRef:
+              name: ecommerce-api-config
+          - secretRef:
+              name: ecommerce-api-secrets
+      containers:
+        - name: django
+          # image: kimanikevin254/drf-ecommerce-api:latest
+          image: ecommerce_api:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ecommerce-api-config
+            - secretRef:
+                name: ecommerce-api-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /admin/
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /admin/
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# Expose Django app as a LoadBalancer service
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: django-app
+  ports:
+    - port: 8000
+      targetPort: 8000
+      

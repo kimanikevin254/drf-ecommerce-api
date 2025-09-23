@@ -3,3 +3,6 @@
 
 .env
 .coverage
+
+k8s/configmap.yaml
+k8s/secret.yaml
