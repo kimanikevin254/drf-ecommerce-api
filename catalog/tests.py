@@ -1,7 +1,13 @@
 from django.test import TestCase
+from django.contrib.auth import get_user_model
+from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import status
 from decimal import Decimal
 
 from catalog.models import Category, Product
+
+User = get_user_model()
 
 class CategoryModelTestCase(TestCase):
     def setUp(self):
@@ -64,3 +70,164 @@ class ProductModelTestCase(TestCase):
         self.assertTrue(self.product.is_active)
         self.assertIsNotNone(self.product.created_at)
         self.assertIsNotNone(self.product.updated_at)
+
+class CategoryAPITestCase(APITestCase):
+    def setUp(self):
+        """Set up test data and authentication"""
+        # Create users
+        self.customer = User.objects.create_user(
+            email='customer@test.com',
+            password='testpass123',
+            user_type='customer'
+        )
+        
+        self.admin = User.objects.create_user(
+            email='admin@test.com',
+            password='testpass123',
+            user_type='admin',
+            is_staff=True
+        )
+        
+        # Create test categories
+        self.parent_category = Category.objects.create(name='Electronics')
+        self.child_category = Category.objects.create(
+            name='Smartphones',
+            parent=self.parent_category
+        )
+        
+        # Create products for testing
+        Product.objects.create(
+            name='iPhone 15',
+            price=Decimal('999.99'),
+            category=self.child_category,
+            stock_quantity=5
+        )
+        Product.objects.create(
+            name='Samsung Galaxy',
+            price=Decimal('799.99'),
+            category=self.child_category,
+            stock_quantity=3
+        )
+
+    def get_jwt_token(self, user):
+        """Helper to get JWT token"""
+        refresh = RefreshToken.for_user(user)
+        return str(refresh.access_token)
+
+    def authenticate_customer(self):
+        """Authenticate as customer"""
+        token = self.get_jwt_token(self.customer)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def authenticate_admin(self):
+        """Authenticate as admin"""
+        token = self.get_jwt_token(self.admin)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def test_list_categories_unauthenticated(self):
+        """Test listing categories without authentication (should work)"""
+        response = self.client.get('/api/v1/catalog/categories/')
+        data = response.json()
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(data['data']['results']), 2)
+
+    def test_list_categories_authenticated(self):
+        """Test listing categories with authentication"""
+        self.authenticate_customer()
+        response = self.client.get('/api/v1/catalog/categories/')
+        data = response.json()
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(data['data']['results']), 2)
+
+    def test_create_category_as_admin(self):
+        """Test creating category as admin (should succeed)"""
+        self.authenticate_admin()
+        
+        category_data = {
+            'name': 'Laptops',
+            'parent': self.parent_category.id
+        }
+        
+        response = self.client.post('/api/v1/catalog/categories/', category_data)
+        data = response.json()
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(data['data']['name'], 'Laptops')
+        
+        # Verify category was created
+        self.assertTrue(Category.objects.filter(name='Laptops').exists())
+
+    def test_create_category_as_customer(self):
+        """Test creating category as customer (should fail)"""
+        self.authenticate_customer()
+        
+        category_data = {
+            'name': 'Tablets',
+            'parent': self.parent_category.id
+        }
+        
+        response = self.client.post('/api/v1/catalog/categories/', category_data)
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_create_category_unauthenticated(self):
+        """Test creating category without authentication (should fail)"""
+        category_data = {
+            'name': 'Tablets'
+        }
+        
+        response = self.client.post('/api/v1/catalog/categories/', category_data)
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_update_category_as_admin(self):
+        """Test updating category as admin"""
+        self.authenticate_admin()
+        
+        update_data = {
+            'name': 'Smart Devices'
+        }
+        
+        response = self.client.patch(
+            f'/api/v1/catalog/categories/{self.child_category.id}/',
+            update_data
+        )
+        data = response.json()
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(data['data']['name'], 'Smart Devices')
+        
+    def test_delete_category_with_products_should_fail(self):
+        """Test deleting category that has products (should fail)"""
+        self.authenticate_admin()
+        
+        response = self.client.delete(
+            f'/api/v1/catalog/categories/{self.child_category.id}/'
+        )
+        data = response.json()
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Cannot delete a category with products. Move or delete products first.', data['errors'])
+
+    def test_category_average_price_endpoint(self):
+        """Test category average price calculation"""
+        response = self.client.get(
+            f'/api/v1/catalog/categories/{self.child_category.id}/average-price/'
+        )
+        data = response.json()
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(data['success'])
+        
+        # Average of 999.99 and 799.99 = 899.99
+        expected_avg = 899.99
+        self.assertEqual(data['data']['average_price'], expected_avg)
+        self.assertEqual(data['data']['total_products'], 2)
+
+    def test_category_average_price_nonexistent_category(self):
+        """Test average price for non-existent category"""
+        response = self.client.get('/api/v1/catalog/categories/99999/average-price/')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
