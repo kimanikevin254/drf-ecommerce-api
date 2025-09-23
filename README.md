@@ -56,3 +56,11 @@ See [API_DOCS.md](/docs/API_DOCS.md) for detailed endpoint documentation.
 ## Deployment
 
 See [DEPLOYMENT.md](/docs/DEPLOYMENT.md) for Kubernetes deployment instructions.
+
+## Testing
+
+See [TESTING.md](/docs/TESTING.md) for instructions on running tests.
+
+## Architecture
+
+See [ARCHITECTURE.md](/docs/ARCHITECTURE.md) for an overview of the system design, components, and data flow.
