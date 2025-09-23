@@ -992,3 +992,17 @@ class OrderSMSService(TestCase):
         self.assertEqual(result['error'], 'Failed')
         self.assertEqual(result['phone'], '+254700123456')
         self.assertEqual(result['status_code'], '103')
+
+    def test_process_sms_response_empty_recipients_array(self):
+        """Test processing response with empty recipients array"""
+        response = {
+            'SMSMessageData': {
+                'Recipients': []
+            }
+        }
+        
+        result = self.service._process_sms_response(response, '+254700123456', 'Test message')
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No recipients found in API response')
+        self.assertEqual(result['phone'], '+254700123456')
