@@ -11,6 +11,7 @@ from catalog.models import Category, Product
 from orders.models import Order, OrderItem
 from orders.tasks import send_order_notifications, send_customer_sms, send_admin_email
 from orders.services.order_email_service import OrderEmailService
+from orders.services.order_sms_service import OrderSMSSerive
 
 User = get_user_model()
 
@@ -779,3 +780,215 @@ class OrderEmailServiceTestCase(TestCase):
         self.assertIn('admin1@test.com', call_args.kwargs['recipient_list'])
         self.assertIn('admin2@test.com', call_args.kwargs['recipient_list'])
         self.assertFalse(call_args.kwargs['fail_silently'])
+
+class OrderSMSService(TestCase):
+    def setUp(self):
+        """Set up test data"""
+        self.customer = User.objects.create_user(
+            email='customer@test.com',
+            first_name='John',
+            last_name='Doe',
+            user_type='customer'
+        )
+        
+        # Create test order
+        category = Category.objects.create(name='Electronics')
+        product = Product.objects.create(
+            name='iPhone 15',
+            price=Decimal('999.99'),
+            category=category
+        )
+        
+        self.order = Order.objects.create(
+            customer=self.customer,
+            customer_email='customer@test.com',
+            customer_phone='+254700123456',
+            delivery_address='Test Address',
+            total_amount=Decimal('999.99')
+        )
+        
+        OrderItem.objects.create(
+            order=self.order,
+            product=product,
+            quantity=1,
+            price=Decimal('999.99')
+        )
+        
+        self.service = OrderSMSSerive()
+
+    def test_format_phone_number_already_formatted(self):
+        """Test formatting phone number that's already in correct format"""
+        phone = '+254700123456'
+        formatted = self.service.format_phone_number(phone)
+        self.assertEqual(formatted, '+254700123456')
+
+    def test_format_phone_number_starts_with_254(self):
+        """Test formatting phone number starting with 254"""
+        phone = '254700123456'
+        formatted = self.service.format_phone_number(phone)
+        self.assertEqual(formatted, '+254700123456')
+
+    def test_format_phone_number_starts_with_zero(self):
+        """Test formatting phone number starting with 0"""
+        phone = '0700123456'
+        formatted = self.service.format_phone_number(phone)
+        self.assertEqual(formatted, '+254700123456')
+
+    def test_format_phone_number_starts_with_seven(self):
+        """Test formatting phone number starting with 7"""
+        phone = '700123456'
+        formatted = self.service.format_phone_number(phone)
+        self.assertEqual(formatted, '+254700123456')
+
+    def test_format_phone_number_starts_with_one(self):
+        """Test formatting phone number starting with 1"""
+        phone = '100123456'
+        formatted = self.service.format_phone_number(phone)
+        self.assertEqual(formatted, '+254100123456')
+
+    def test_create_order_confirmation_message(self):
+        """Test creating order confirmation SMS message"""
+        message = self.service.create_order_confirmation_message(self.order)
+        
+        expected_message = (
+            f"Hi John! "
+            f"Your order #{self.order.id} for $999.99 has been confirmed. "
+            f"We'll notify you when it's ready for delivery. Thank you!"
+        )
+        
+        self.assertEqual(message, expected_message)
+        self.assertIn('John', message)
+        self.assertIn(str(self.order.id), message)
+        self.assertIn('999.99', message)
+
+    def test_send_order_confirmation_sms_no_phone_number(self):
+        """Test sending SMS when order has no phone number"""
+        # Create order without phone number
+        order_no_phone = Order.objects.create(
+            customer=self.customer,
+            customer_email='customer@test.com',
+            customer_phone='',  # Empty phone
+            delivery_address='Test Address',
+            total_amount=Decimal('999.99')
+        )
+        
+        result = self.service.send_order_confirmation_sms(order_no_phone)
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No phone number')
+
+    @patch('orders.services.order_sms_service.SMSService')
+    def test_send_order_confirmation_sms_success(self, mock_sms_service):
+        """Test successful SMS sending"""
+        # Mock the SMS client
+        mock_client = MagicMock()
+        mock_sms_service.return_value = mock_client
+        
+        # Mock successful API response
+        mock_response = {
+            'SMSMessageData': {
+                'Recipients': [{
+                    'status': 'Success',
+                    'messageId': 'ATXid_123456789',
+                    'cost': 'KES 2.00',
+                    'statusCode': '101'
+                }]
+            }
+        }
+        mock_client.send.return_value = mock_response
+        
+        # Create new service instance to get mocked SMS client
+        service = OrderSMSSerive()
+        result = service.send_order_confirmation_sms(self.order)
+        
+        # Assertions
+        self.assertTrue(result['success'])
+        self.assertEqual(result['phone'], '+254700123456')
+        self.assertEqual(result['message_id'], 'ATXid_123456789')
+        self.assertEqual(result['cost'], 'KES 2.00')
+        self.assertEqual(result['status'], 'Success')
+        self.assertIn('John', result['message'])
+
+    @patch('orders.services.order_sms_service.SMSService')
+    def test_send_order_confirmation_sms_api_failure(self, mock_sms_service):
+        """Test SMS sending when API returns failure status"""
+        # Mock the SMS client
+        mock_client = MagicMock()
+        mock_sms_service.return_value = mock_client
+        
+        # Mock failure API response
+        mock_response = {
+            'SMSMessageData': {
+                'Recipients': [{
+                    'status': 'Failed',
+                    'statusCode': '103'
+                }]
+            }
+        }
+        mock_client.send.return_value = mock_response
+        
+        service = OrderSMSSerive()
+        result = service.send_order_confirmation_sms(self.order)
+        
+        # Assertions
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'Failed')
+        self.assertEqual(result['phone'], '+254700123456')
+        self.assertEqual(result['status_code'], '103')
+
+    @patch('orders.services.order_sms_service.SMSService')
+    def test_send_order_confirmation_sms_exception(self, mock_sms_service):
+        """Test SMS sending when exception occurs"""
+        # Mock the SMS client to raise exception
+        mock_client = MagicMock()
+        mock_sms_service.return_value = mock_client
+        mock_client.send.side_effect = Exception("Network error")
+        
+        service = OrderSMSSerive()
+        result = service.send_order_confirmation_sms(self.order)
+        
+        # Assertions
+        self.assertFalse(result['success'])
+        self.assertIn('SMS sending failed', result['error'])
+        self.assertIn('Network error', result['error'])
+        self.assertEqual(result['phone'], '+254700123456')
+
+    def test_process_sms_response_success(self):
+        """Test processing successful SMS response"""
+        response = {
+            'SMSMessageData': {
+                'Recipients': [{
+                    'status': 'Success',
+                    'messageId': 'ATXid_123456789',
+                    'cost': 'KES 2.00',
+                    'statusCode': '101'
+                }]
+            }
+        }
+        
+        result = self.service._process_sms_response(response, '+254700123456', 'Test message')
+        
+        self.assertTrue(result['success'])
+        self.assertEqual(result['phone'], '+254700123456')
+        self.assertEqual(result['message'], 'Test message')
+        self.assertEqual(result['message_id'], 'ATXid_123456789')
+        self.assertEqual(result['cost'], 'KES 2.00')
+        self.assertEqual(result['status'], 'Success')
+
+    def test_process_sms_response_failure(self):
+        """Test processing failed SMS response"""
+        response = {
+            'SMSMessageData': {
+                'Recipients': [{
+                    'status': 'Failed',
+                    'statusCode': '103'
+                }]
+            }
+        }
+        
+        result = self.service._process_sms_response(response, '+254700123456', 'Test message')
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'Failed')
+        self.assertEqual(result['phone'], '+254700123456')
+        self.assertEqual(result['status_code'], '103')
