@@ -5,8 +5,13 @@ class StandardJSONRenderer(JSONRenderer):
         response = renderer_context.get('response')
 
         if response and response.status_code >= 400:
-            # Already formatted by exception handler
-            return super().render(data, accepted_media_type, renderer_context)
+            # Ensure even manual error responses are standardized
+            error_custom_response = {
+                'success': False,
+                'errors': data,
+                'data': None
+            }
+            return super().render(error_custom_response, accepted_media_type, renderer_context)
         else:
             # Success response
             custom_response = {

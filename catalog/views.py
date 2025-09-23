@@ -1,6 +1,7 @@
 from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Avg
 
@@ -30,17 +31,11 @@ class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
         # Check if category has children
         if category.children.exists():
-            return Response(
-                data='Cannot delete a category with subcategories. Delete subcategories first.',
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            raise ValidationError('Cannot delete a category with subcategories. Delete subcategories first.')
         
         # Check if category has products
         if category.products.exists():
-            return Response(
-                data='Cannot delete a category with products. Move or delete products first.',
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            raise ValidationError('Cannot delete a category with products. Move or delete products first.')
 
         return super().destroy(request, *args, **kwargs)
     
