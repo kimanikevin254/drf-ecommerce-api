@@ -12,7 +12,6 @@ class StandardJSONRenderer(JSONRenderer):
                 and 'errors' in data
                 and 'data' in data
             ):
-                print('already formatted mahn')
                 # Already formatted by exception handler
                 return super().render(data, accepted_media_type, renderer_context)
             else:
