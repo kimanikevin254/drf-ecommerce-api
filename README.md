@@ -48,3 +48,7 @@ A Django REST API for ecommerce with OpenID connect authentication, background n
     ```
 
     > Make sure to replace the placeholders in the `.env` file with your own credentials.
+
+## API Documentation
+
+See [API_DOCS.md](/docs/API_DOCS.md) for detailed endpoint documentation.
