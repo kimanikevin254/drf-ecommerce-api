@@ -38,12 +38,12 @@ jobs:
           name: Run tests with coverage
           command: |
             source .venv/bin/activate
-            coverage run manage.py test --settings=ecommerce_api.settings
+            coverage run manage.py test --settings=ecommerce_api.settings_test
             coverage report
             coverage html
 
       - store_artifacts:
-          path: coverage.html
+          path: htmlcov
           destination: coverage
 
 workflows:
