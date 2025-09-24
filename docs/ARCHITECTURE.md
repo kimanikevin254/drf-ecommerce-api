@@ -8,10 +8,9 @@ The system follows Django best practices with clear separation of concerns.
 
 -   **Django API**: REST endpoints with DRF
 -   **PostgreSQL**: Primary database
--   **Redis**: Caching and task queue
+-   **Redis**: Task queue
 -   **Celery**: Background task processing
 -   **Africa's Talking**: SMS notifications
--   **SMTP**: Email notifications
 
 ## Project Structure
 
